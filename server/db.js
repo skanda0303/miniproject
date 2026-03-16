@@ -21,6 +21,7 @@ export async function initDb() {
       summary TEXT,
       tags TEXT,
       value_score INTEGER,
+      category TEXT DEFAULT 'Uncategorized',
       processed_at TEXT
     );
 
@@ -45,6 +46,16 @@ export async function initDb() {
       expiry_date INTEGER
     );
 
+    CREATE TABLE IF NOT EXISTS embeddings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      file_id TEXT,
+      content TEXT,
+      embedding BLOB,
+      metadata TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(file_id) REFERENCES files(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS reorganization_suggestions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       file_id TEXT,
@@ -54,6 +65,14 @@ export async function initDb() {
       status TEXT DEFAULT 'PENDING'
     );
   `);
+
+  // Migration: add 'category' column if it doesn't exist yet (for existing DBs)
+  try {
+    await db.run(`ALTER TABLE files ADD COLUMN category TEXT DEFAULT 'Uncategorized'`);
+    console.log('[DB] Migrated: added category column to files table.');
+  } catch (e) {
+    // Column already exists — ignore
+  }
 
   return db;
 }

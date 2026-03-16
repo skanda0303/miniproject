@@ -9,15 +9,21 @@
     "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "reset": "node reset-index.js",
+    "unlink": "node unlink.js",
+    "verify": "node verify-read.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@langchain/google-genai": "^2.1.15",
+    "@langchain/textsplitters": "^1.0.1",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "google-auth-library": "^10.5.0",
     "googleapis": "^171.2.0",
+    "langchain": "^1.2.18",
     "morgan": "^1.10.1",
     "node-cron": "^4.2.1",
     "office-text-extractor": "^4.0.0",

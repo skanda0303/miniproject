@@ -30,7 +30,3 @@ build/
 # Temporary files
 temp/
 *.tmp
-
-# Test files
-test-*.js
-check-db.js

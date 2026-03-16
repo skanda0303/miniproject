@@ -1,46 +1,92 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 
-function App() {
-  const [status, setStatus] = useState({ authenticated: false, fileCount: 0, logs: [] });
-  const [question, setQuestion] = useState('');
-  const [answer, setAnswer] = useState('');
-  const [loading, setLoading] = useState(false);
+const CATEGORY_ICONS = {
+  'Finance': '💰',
+  'Legal': '⚖️',
+  'Education': '🎓',
+  'Projects': '🚀',
+  'Personal': '🏠',
+  'Tech': '💻',
+  'Work': '💼',
+  'Resumes': '📄',
+  'Uncategorized': '📁',
+};
 
+function App() {
+  const [status, setStatus] = useState({ authenticated: false, fileCount: 0, indexingComplete: false });
+  const [question, setQuestion] = useState('');
+  const [chatHistory, setChatHistory] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('files');
+  const [searchFilter, setSearchFilter] = useState('');
+
+  const fetchData = async () => {
+    try {
+      const [statusRes, sugRes, filesRes] = await Promise.all([
+        fetch('http://localhost:3001/api/status'),
+        fetch('http://localhost:3001/api/suggestions'),
+        fetch('http://localhost:3001/api/files')
+      ]);
+      const statusData = await statusRes.json();
+      const sugData = await sugRes.json();
+      const filesData = await filesRes.json();
+      setStatus(statusData);
+      setSuggestions(sugData);
+      setFiles(filesData);
+    } catch (e) {
+      console.error('Data sync failed');
+    }
+  };
 
   useEffect(() => {
-    const fetchStatus = async () => {
-      try {
-        const res = await fetch('http://localhost:3001/api/status');
-        const data = await res.json();
-        setStatus(data);
-
-        const sugRes = await fetch('http://localhost:3001/api/suggestions');
-        const sugData = await sugRes.json();
-        setSuggestions(sugData);
-
-        const filesRes = await fetch('http://localhost:3001/api/files');
-        const filesData = await filesRes.json();
-        setFiles(filesData);
-      } catch (e) {
-        console.error('Failed to fetch status');
-      }
-    };
-
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 5000);
+    fetchData();
+    const interval = setInterval(fetchData, 15000);
     return () => clearInterval(interval);
   }, []);
 
-  const handleApprove = async (id) => {
-    await fetch('http://localhost:3001/api/approve', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id })
-    });
-    setSuggestions(suggestions.filter(s => s.id !== id));
+  const handleAsk = async (e) => {
+    e.preventDefault();
+    if (!question.trim()) return;
+
+    const userMsg = question;
+    setQuestion('');
+    setLoading(true);
+
+    // Add User message then Assistant placeholder as separate entries
+    const newHistory = [
+      ...chatHistory,
+      { role: 'user', content: userMsg },
+      { role: 'assistant', content: 'Analyzing your files...' }
+    ];
+    setChatHistory(newHistory);
+
+    try {
+      const res = await fetch('http://localhost:3001/api/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: userMsg,
+          history: chatHistory.slice(-5).map(m => m.content) // Simplified history for server
+        })
+      });
+      const data = await res.json();
+
+      // Update the last entry (the placeholder) with the real answer
+      setChatHistory([
+        ...newHistory.slice(0, -1),
+        { role: 'assistant', content: data.answer || 'I couldn\'t find a specific answer.' }
+      ]);
+    } catch (e) {
+      setChatHistory([
+        ...newHistory.slice(0, -1),
+        { role: 'assistant', content: 'Local AI is currently offline. Please check if Ollama is running.' }
+      ]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleConnect = async () => {
@@ -49,137 +95,153 @@ function App() {
     window.open(data.url, '_blank');
   };
 
-  const handleAsk = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const res = await fetch('http://localhost:3001/api/ask', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question })
-      });
-      const data = await res.json();
-      setAnswer(data.answer);
-    } catch (e) {
-      setAnswer('Failed to get answer');
-    }
-    setLoading(false);
-  };
+  if (!status.authenticated) {
+    return (
+      <div className="auth-view">
+        <h1 className="logo-text" style={{ fontSize: '5rem', marginBottom: '10px' }}>Intellect<span>.</span></h1>
+        <p style={{ fontSize: '1.5rem', marginBottom: '30px', opacity: 0.8 }}>Intelligent Drive Management</p>
+        <button onClick={handleConnect} className="btn-send" style={{ padding: '15px 40px', fontSize: '1.2rem' }}>
+          Connect Google Drive
+        </button>
+      </div>
+    );
+  }
 
-  const handleRescan = async () => {
-    try {
-      await fetch('http://localhost:3001/api/scan', { method: 'POST' });
-      // Optionally refresh status immediately
-    } catch (e) {
-      console.error('Failed to trigger scan');
-    }
-  };
+  const filteredFiles = files.filter(f =>
+    f.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
+    f.category?.toLowerCase().includes(searchFilter.toLowerCase())
+  );
 
   return (
-    <div className="container">
-      <header>
-        <h1 className="gradient-text">Drive Intelligence Agent</h1>
-        <div className={`status-badge ${status.authenticated ? 'status-active' : 'status-inactive'}`}>
-          <div className="status-dot"></div>
-          {status.authenticated ? 'Agent Active' : 'Disconnected'}
+    <div className="app-container">
+      <header className="app-header">
+        <div className="logo-text">Intellect<span>.</span></div>
+        <div className="search-bar-container">
+          <input
+            type="text"
+            className="search-bar"
+            placeholder="Search documents..."
+            value={searchFilter}
+            onChange={(e) => setSearchFilter(e.target.value)}
+          />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <div style={{ color: status.indexingComplete ? '#0ef' : '#f9ab00', fontSize: '0.9rem', fontWeight: 600 }}>
+            {status.indexingComplete ? 'SYNCED' : 'INDEXING...'}
+          </div>
+          <div style={{ width: '40px', height: '40px', background: 'var(--main-color)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifySelf: 'center', textAlign: 'center', justifyContent: 'center', color: 'var(--bg-color)', fontWeight: 700 }}>S</div>
         </div>
       </header>
 
-      <main className="dashboard-grid">
-        <section className="glass-card stats-card">
-          <h3>Memory Stats</h3>
-          <div className="stat-item">
-            <span className="label">Analyzed Files</span>
-            <span className="value">{status.fileCount}</span>
-          </div>
-          {!status.authenticated && (
-            <button onClick={handleConnect} className="connect-btn">Connect Google Drive</button>
-          )}
-        </section>
+      <aside className="app-sidebar">
+        <div className={`nav-item ${activeTab === 'files' ? 'active' : ''}`} onClick={() => setActiveTab('files')}>
+          My Storage
+        </div>
+        <div className={`nav-item ${activeTab === 'chat' ? 'active' : ''}`} onClick={() => setActiveTab('chat')}>
+          AI Assistant
+        </div>
+        <div className={`nav-item ${activeTab === 'suggestions' ? 'active' : ''}`} onClick={() => setActiveTab('suggestions')}>
+          Optimize
+          {suggestions.length > 0 && <span style={{ color: 'var(--main-color)', marginLeft: '10px' }}>[{suggestions.length}]</span>}
+        </div>
 
-        <section className="glass-card logs-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h3 style={{ margin: 0 }}>Activity Logs</h3>
-            <button onClick={handleRescan} className="rescan-btn" style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', padding: '0.4rem 0.8rem', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}>
-              ↻ Rescan
-            </button>
+        <div style={{ marginTop: 'auto' }}>
+          <div className="nav-item" style={{ opacity: 0.6, fontSize: '0.9rem' }} onClick={() => fetch('http://localhost:3001/api/logout', { method: 'POST' }).then(() => window.location.reload())}>
+            Logout Session
           </div>
-          <div className="logs-list">
-            {status.logs.map(log => (
-              <div key={log.id} className="log-entry">
-                <span className="log-time">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                <span className="log-action">{log.action}</span>
-                <span className="log-details">{log.details}</span>
-              </div>
-            ))}
-            {status.logs.length === 0 && <p className="empty-state">No activity yet</p>}
-          </div>
-        </section>
+        </div>
+      </aside>
 
-        <section className="glass-card chat-card">
-          <h3>Ask Your Drive</h3>
-          <form onSubmit={handleAsk} className="chat-form">
-            <input
-              type="text"
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="How can I help you today?"
-              className="chat-input"
-            />
-            <button type="submit" disabled={loading}>
-              {loading ? 'Thinking...' : 'Ask'}
-            </button>
-          </form>
-          {answer && (
-            <div className="answer-box">
-              <p>{answer}</p>
+      <main className="app-main">
+        {activeTab === 'files' && (
+          <div className="files-area">
+            <h2 style={{ fontSize: '2rem', marginBottom: '30px' }}>My <span>Storage</span></h2>
+            <div className="file-grid">
+              {filteredFiles.map(file => (
+                <a key={file.id}
+                  href={`https://drive.google.com/file/d/${file.id}/view`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="file-card">
+                  <div className="file-icon-box">{CATEGORY_ICONS[file.category] || '📄'}</div>
+                  <div className="file-title">{file.name}</div>
+                  <div className="file-tag">{file.category}</div>
+                  <p style={{ fontSize: '0.8rem', marginTop: '15px', opacity: 0.7, height: '3em', overflow: 'hidden' }}>
+                    {file.summary || 'Analyzing content...'}
+                  </p>
+                </a>
+              ))}
             </div>
-          )}
-        </section>
+          </div>
+        )}
 
-        <section className="glass-card suggestions-card">
-          <h3>Reorganization Suggestions</h3>
-          <div className="suggestions-list">
-            {suggestions.map(s => (
-              <div key={s.id} className="suggestion-item">
-                <div className="suggestion-info">
-                  <span className="file-name">{s.original_path}</span>
-                  <p className="suggestion-reason">{s.reason}</p>
+        {activeTab === 'chat' && (
+          <div className="chat-container">
+            <h2 style={{ fontSize: '2rem', marginBottom: '20px' }}>Smart <span>Assistant</span></h2>
+            <div className="chat-messages">
+              {chatHistory.length === 0 && (
+                <div style={{ margin: 'auto', textAlign: 'center', opacity: 0.5 }}>
+                  <div style={{ fontSize: '4rem', marginBottom: '10px' }}>💬</div>
+                  <p>Ask me about your documents, USNs, or categorization.</p>
                 </div>
-                <button onClick={() => handleApprove(s.id)} className="approve-btn">Approve Move</button>
-              </div>
-            ))}
-            {suggestions.length === 0 && <p className="empty-state">No pending suggestions</p>}
+              )}
+              {chatHistory.map((msg, i) => (
+                <div key={i} className={`msg-wrapper ${msg.role === 'user' ? 'user' : 'ai'}`}>
+                  <div className="msg-bubble">
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, marginBottom: '5px', opacity: 0.6 }}>
+                      {msg.role === 'user' ? 'YOU' : 'INTELLECT'}
+                    </div>
+                    {msg.content}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="chat-input-area">
+              <form className="chat-input-form" onSubmit={handleAsk}>
+                <input
+                  type="text"
+                  placeholder="Ask Intellect anything..."
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                />
+                <button type="submit" className="btn-send" disabled={loading}>
+                  {loading ? '...' : 'Send'}
+                </button>
+              </form>
+            </div>
           </div>
-        </section>
+        )}
 
-        <section className="glass-card inventory-card">
-          <h3>Drive Inventory</h3>
-          <div className="files-list">
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Mime Type</th>
-                  <th>Summary</th>
-                </tr>
-              </thead>
-              <tbody>
-                {files.map(f => (
-                  <tr key={f.id}>
-                    <td className="file-name-cell">{f.name}</td>
-                    <td className="mime-cell">{f.mimeType.split('/').pop()}</td>
-                    <td className="summary-cell">{f.summary}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {files.length === 0 && <p className="empty-state">No files processed yet</p>}
+        {activeTab === 'suggestions' && (
+          <div className="suggestions-area">
+            <h2 style={{ fontSize: '2rem', marginBottom: '30px' }}>Optimize <span>Drive</span></h2>
+            {suggestions.length === 0 ? (
+              <div style={{ padding: '50px', background: 'var(--second-bg-color)', borderRadius: '2rem', textAlign: 'center', opacity: 0.6 }}>
+                Drive is currently optimal.
+              </div>
+            ) : (
+              suggestions.map(s => (
+                <div key={s.id} className="file-card" style={{ textAlign: 'left', cursor: 'default', marginBottom: '20px', width: '100%' }}>
+                  <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                    <div style={{ fontSize: '3rem' }}>�</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: '1.2rem', color: 'var(--main-color)' }}>REORGANIZATION REQUEST</div>
+                      <p style={{ marginTop: '5px' }}>Move <strong>{s.original_path}</strong> to <strong>{s.suggested_path}</strong></p>
+                      <p style={{ fontSize: '0.85rem', opacity: 0.7, marginTop: '10px' }}>{s.reason}</p>
+                      <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
+                        <button className="btn-send" onClick={() => fetch('http://localhost:3001/api/approve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: s.id }) }).then(() => fetchData())}>Approve Action</button>
+                        <button className="btn-send" style={{ background: 'transparent', border: '2px solid var(--main-color)', color: 'var(--main-color)' }} onClick={() => fetch('http://localhost:3001/api/deny', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: s.id }) }).then(() => fetchData())}>Dismiss</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
-        </section>
+        )}
       </main>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
