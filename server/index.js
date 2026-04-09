@@ -155,12 +155,13 @@ app.post('/api/logout', async (req, res) => {
 });
 
 app.post('/api/ask', async (req, res) => {
-    const { question, history } = req.body;
+    const { question, history, model } = req.body;
     if (!agent) return res.status(400).json({ error: 'Agent not started' });
 
     try {
+        const modelLabel = model || 'gemma2:9b';
         // Pure RAG: embed the question and find semantically similar chunks
-        console.log(`[RAG] Query: "${question}"`);
+        console.log(`[RAG] Query: "${question}" using ${modelLabel}`);
         const relevantChunks = await agent.vectorSearch(question);
 
         // Build context from top chunks
@@ -186,10 +187,10 @@ app.post('/api/ask', async (req, res) => {
             ])
         ).values()];
 
-        // Generate answer with Local AI (Gemma 2)
+        // Generate answer with Local AI (Gemma 2 or Qwen)
         try {
             const { generateAnswer } = await import('./gemini.js');
-            const answer = await generateAnswer(question, fullContext, history);
+            const answer = await generateAnswer(question, fullContext, history, modelLabel);
             res.json({ answer, files: uniqueFiles });
         } catch (genError) {
             console.error('Local AI Error:', genError.message);

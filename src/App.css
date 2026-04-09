@@ -158,6 +158,30 @@ body {
   border-top-left-radius: 0;
 }
 
+.ai .msg-bubble h3 {
+  color: var(--main-color);
+  font-size: 1.1rem;
+  margin: 15px 0 10px 0;
+  border-bottom: 1px solid rgba(0, 238, 255, 0.2);
+}
+
+.ai .msg-bubble h3:first-child {
+  margin-top: 0;
+}
+
+.ai .msg-bubble ul, .ai .msg-bubble ol {
+  margin-left: 20px;
+  margin-bottom: 10px;
+}
+
+.ai .msg-bubble li {
+  margin-bottom: 5px;
+}
+
+.ai .msg-bubble strong {
+  color: var(--main-color);
+}
+
 .chat-input-area {
   padding-top: 20px;
 }

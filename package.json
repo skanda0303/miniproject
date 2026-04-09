@@ -10,7 +10,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "reset": "node reset-index.js",
+    "reset": "node reset-db.js",
     "unlink": "node unlink.js",
     "verify": "node verify-read.js"
   },
@@ -30,6 +30,8 @@
     "pdf-parse": "^2.4.5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7"
   },

@@ -102,33 +102,36 @@ export async function generateEmbedding(text) {
     return null;
 }
 
-export async function generateAnswer(question, context, history = []) {
-    // Trim context to top 6 chunks to allow more detail while staying within token limits
-    // We split by our custom separator and skip the first item if it's just the global overview to ensure we get actual file content
+export async function generateAnswer(question, context, history = [], modelLabel = 'gemma2:9b') {
+    // Trim context to top 10 chunks
     const chunks = context.split('\n\n---\n\n');
-    const trimmedContext = chunks.slice(0, 7).join('\n\n---\n\n');
+    const trimmedContext = chunks.slice(0, 10).join('\n\n---\n\n');
 
     // Format history for the prompt
     const historyString = history.length > 0
         ? history.join('\n')
         : "No previous conversation.";
 
-    const prompt = `You are "Intellect", an intelligent personal assistant for managing Google Drive documents.
-Your goal is to help users find information in their files and manage their storage.
+    const prompt = `You are "Intellect", a precise personal AI researcher.
+Your goal is to provide structured, academic-grade answers grounded in the user's private documents.
 
-### Core Guidelines:
-1. **Be Proactive & Conversational**: Respond naturally, but also provide the information found immediately. Don't ask for permission to summarize if you've already found the content.
-2. **Proactive Inference**: If the user's queston is brief (e.g., just one or two words like "Budget" or "USN"), try to find relevant files OR explain what you know about that topic in the context of their documents.
-3. **Contextual Awareness**: 
-   - Use the [Context & Drive Info] below to answer factual questions.
-   - If the information isn't in the documents, use your general intelligence but mention you're drawing from broader knowledge.
-   - You can see how many files they have and their categories—use this to give "big picture" answers if they ask about their storage.
-4. **Tone**: State-of-the-art, premium, and friendly.
+### Output Formatting Rules:
+1. **Deductive Reasoning**: Structure your response with a brief deduction logic before the final answer.
+2. **Structure**: ALWAYS use **Markdown** (headers, bullet points, and bold text) for readability. DO NOT output large blocks of text.
+3. **Sections**:
+   - **### 🔎 Evidence & Deduction**: (1 sentence explaining which document context supports this).
+   - **### 💡 Synthesis**: (The main answer broken into logical bullet points).
+   - **### 🔍 Sources**: (List the specific file names used).
+
+### Critical Extraction Rules:
+1. **Factual Grounding**: Prioritize specific names, dates, and examples EXACTLY as they appear in the [Context].
+2. **No Hallucinations**: Do not substitute document content with general knowledge if it's a specific personal fact.
+3. **General Knowledge**: If the documents don't answer the question, state "[DEDUCTION]: Data not found in local files. Using general knowledge for context." then answer.
 
 ### Conversation History:
 ${historyString}
 
-### Context & Drive Info:
+### Context & Documents:
 ${trimmedContext}
 
 ### User's Question:
@@ -137,17 +140,17 @@ ${trimmedContext}
 Assistant:`;
 
     try {
-        console.log('[LOCAL AI] Generating answer with gemma2:9b...');
+        console.log(`[LOCAL AI] Generating answer with ${modelLabel}...`);
         const response = await fetch(`${OLLAMA_BASE}/api/generate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                model: 'gemma2:9b',
+                model: modelLabel,
                 prompt: prompt,
                 stream: false,
                 options: {
-                    temperature: 0.3,
-                    num_predict: 512
+                    temperature: 0.1,
+                    num_predict: 800
                 }
             })
         });

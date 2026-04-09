@@ -374,29 +374,45 @@ export class DriveAgent {
             const nameConditions = uniqueKeywords.map(() => 'LOWER(f.name) LIKE ?').join(' OR ');
             const params = uniqueKeywords.map(k => `%${k}%`);
 
-            const keywordResults = await this.db.all(
-                `SELECT e.file_id, e.content, e.metadata 
+            // Cast a wide net: fetch up to 50 candidates, then rank in JS
+            const candidateResults = await this.db.all(
+                `SELECT e.file_id, e.content, e.metadata
                  FROM embeddings e
                  JOIN files f ON e.file_id = f.id
                  WHERE ${contentConditions} OR ${nameConditions}
-                 LIMIT 5`,
+                 LIMIT 50`,
                 [...params, ...params]
             );
 
-            if (keywordResults.length > 0) {
-                const mappedKws = keywordResults.map(r => {
+            if (candidateResults.length > 0) {
+                // Score each chunk by how many unique query keywords it contains
+                const scored = candidateResults.map(r => {
                     const metadata = JSON.parse(r.metadata);
+                    const contentLower = r.content.toLowerCase();
+                    const matchCount = uniqueKeywords.filter(k => contentLower.includes(k)).length;
+                    const matchRatio = matchCount / uniqueKeywords.length;
                     return {
                         file_id: r.file_id,
                         content: r.content,
                         fileName: metadata.fileName,
                         category: metadata.category || 'Uncategorized',
-                        similarity: 0.8,
+                        similarity: 0.5 + (0.45 * matchRatio),
+                        matchCount,
+                        matchRatio,
                         source: 'keyword'
                     };
                 });
 
-                mappedKws.forEach(kw => {
+                // Sort by coverage (most keywords matched first)
+                scored.sort((a, b) => b.matchRatio - a.matchRatio);
+
+                // Only keep chunks matching at least 25% of keywords for multi-word queries
+                const minCoverage = uniqueKeywords.length > 3 ? 0.25 : 0;
+                const topKeywordResults = scored.filter(s => s.matchRatio > minCoverage).slice(0, 10);
+
+                console.log(`[RAG] Keyword: ${candidateResults.length} candidates -> ${topKeywordResults.length} after coverage filter. Best: ${topKeywordResults[0]?.matchCount}/${uniqueKeywords.length}`);
+
+                topKeywordResults.forEach(kw => {
                     const existing = vectorResults.find(v => v.content === kw.content);
                     if (existing) {
                         existing.similarity = Math.max(existing.similarity, kw.similarity);

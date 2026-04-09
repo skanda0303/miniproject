@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import './App.css'
 
 const CATEGORY_ICONS = {
@@ -22,6 +24,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('files');
   const [searchFilter, setSearchFilter] = useState('');
+  const [selectedModel, setSelectedModel] = useState('gemma2:9b');
 
   const fetchData = async () => {
     try {
@@ -69,7 +72,8 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           question: userMsg,
-          history: chatHistory.slice(-5).map(m => m.content) // Simplified history for server
+          history: chatHistory.slice(-5).map(m => m.content), // Simplified history for server
+          model: selectedModel
         })
       });
       const data = await res.json();
@@ -177,7 +181,27 @@ function App() {
 
         {activeTab === 'chat' && (
           <div className="chat-container">
-            <h2 style={{ fontSize: '2rem', marginBottom: '20px' }}>Smart <span>Assistant</span></h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h2 style={{ fontSize: '2rem', margin: 0 }}>Smart <span>Assistant</span></h2>
+              <div className="model-selector">
+                <select 
+                  value={selectedModel} 
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  style={{ 
+                    background: 'var(--second-bg-color)', 
+                    color: 'white', 
+                    border: '1px solid var(--main-color)', 
+                    padding: '8px 15px', 
+                    borderRadius: '10px',
+                    fontSize: '0.85rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value="gemma2:9b">Gemma 2 (9B)</option>
+                  <option value="qwen3:8b">Qwen 3 (8B)</option>
+                </select>
+              </div>
+            </div>
             <div className="chat-messages">
               {chatHistory.length === 0 && (
                 <div style={{ margin: 'auto', textAlign: 'center', opacity: 0.5 }}>
@@ -188,10 +212,16 @@ function App() {
               {chatHistory.map((msg, i) => (
                 <div key={i} className={`msg-wrapper ${msg.role === 'user' ? 'user' : 'ai'}`}>
                   <div className="msg-bubble">
-                    <div style={{ fontSize: '0.75rem', fontWeight: 700, marginBottom: '5px', opacity: 0.6 }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, marginBottom: '10px', opacity: 0.6 }}>
                       {msg.role === 'user' ? 'YOU' : 'INTELLECT'}
                     </div>
-                    {msg.content}
+                    {msg.role === 'assistant' ? (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.content}
+                      </ReactMarkdown>
+                    ) : (
+                      msg.content
+                    )}
                   </div>
                 </div>
               ))}
